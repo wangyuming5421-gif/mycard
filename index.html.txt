@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>卡牌进货记账</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+        body { -webkit-tap-highlight-color: transparent; font-family: -apple-system, sans-serif; }
+        .card-shadow { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div id="app" class="max-w-md mx-auto p-4">
+        <h1 class="text-xl font-bold mb-4 text-gray-800 flex items-center">📦 卡牌进货助手</h1>
+        
+        <div class="bg-white p-5 rounded-2xl card-shadow mb-6">
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">进货类型</label>
+                    <select v-model="form.type" class="w-full p-3 bg-gray-100 rounded-xl border-none focus:ring-2 focus:ring-blue-500">
+                        <option value="single">单张卡 (散收)</option>
+                        <option value="box">整盒卡 (原箱/散盒)</option>
+                        <option value="sleeve">配件 (卡套等)</option>
+                    </select>
+                </div>
+
+                <div v-if="form.type === 'single'">
+                    <label class="block text-xs text-gray-500 mb-1">来源地</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button @click="form.source = 'shapingba'" :class="form.source === 'shapingba' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'" class="p-2 rounded-lg text-sm transition">沙坪坝(6元)</button>
+                        <button @click="form.source = 'yubei'" :class="form.source === 'yubei' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'" class="p-2 rounded-lg text-sm transition">渝北(7元+11)</button>
+                    </div>
+                </div>
+
+                <div v-if="form.type === 'box'">
+                    <label class="block text-xs text-gray-500 mb-1">盒子档位</label>
+                    <select v-model="form.boxType" class="w-full p-3 bg-gray-100 rounded-xl border-none">
+                        <option value="165">普通卡 (165元/盒)</option>
+                        <option value="200">好卡 (200元/盒)</option>
+                        <option value="120">处理卡 (120元/盒)</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">进货数量</label>
+                    <input type="number" v-model.number="form.count" class="w-full p-3 bg-gray-100 rounded-xl border-none" placeholder="输入数量">
+                </div>
+
+                <button @click="addItem" class="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold active:scale-95 transition shadow-lg shadow-blue-200">
+                    确认添加记录
+                </button>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 mb-6">
+            <div class="bg-blue-600 p-4 rounded-2xl text-white shadow-lg">
+                <p class="text-xs opacity-80">本月总支出</p>
+                <p class="text-xl font-bold">¥ {{ totalCost }}</p>
+            </div>
+            <div class="bg-white p-4 rounded-2xl border border-gray-100 card-shadow text-center">
+                <p class="text-xs text-gray-400">累计单数</p>
+                <p class="text-xl font-bold text-gray-700">{{ logs.length }}</p>
+            </div>
+        </div>
+
+        <div class="space-y-3">
+            <h2 class="text-sm font-bold text-gray-400 px-1">历史账单 (最近)</h2>
+            <div v-for="(log, index) in logs" :key="index" class="bg-white p-4 rounded-xl flex justify-between items-center card-shadow border-l-4 border-blue-500">
+                <div>
+                    <p class="font-bold text-gray-800 text-sm">{{ log.desc }}</p>
+                    <p class="text-xs text-gray-400">{{ log.date }}</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-orange-500 font-bold">¥{{ log.cost }}</p>
+                    <button @click="remove(index)" class="text-xs text-red-300">删除</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="mt-10 text-center">
+            <button @click="clearAll" class="text-xs text-gray-300 underline">清空所有数据</button>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, computed, onMounted } = Vue
+        createApp({
+            setup() {
+                const logs = ref([])
+                const form = ref({ type: 'single', source: 'shapingba', boxType: '165', count: 1 })
+
+                onMounted(() => {
+                    const saved = localStorage.getItem('card_inventory_logs')
+                    if (saved) logs.value = JSON.parse(saved)
+                })
+
+                const addItem = () => {
+                    if (!form.value.count || form.value.count <= 0) return alert('请输入数量');
+                    let cost = 0; let desc = '';
+                    const date = new Date();
+                    const dateStr = `${date.getMonth()+1}/${date.getDate()} ${date.getHours()}:${date.getMinutes()}`;
+
+                    if (form.value.type === 'single') {
+                        if (form.value.source === 'shapingba') {
+                            cost = form.value.count * 6;
+                            desc = `沙坪坝单卡 x${form.value.count}`;
+                        } else {
+                            cost = (form.value.count * 7) + 11;
+                            desc = `渝北单卡 x${form.value.count} (含11运费)`;
+                        }
+                    } else if (form.value.type === 'box') {
+                        cost = form.value.count * parseInt(form.value.boxType);
+                        let name = form.value.boxType == '165' ? '普通' : (form.value.boxType == '200' ? '好卡' : '处理');
+                        desc = `${name}整盒 x${form.value.count}`;
+                    } else {
+                        cost = form.value.count * 20;
+                        desc = `卡套配件 x${form.value.count}`;
+                    }
+
+                    logs.value.unshift({ date: dateStr, desc, cost });
+                    save();
+                }
+
+                const save = () => localStorage.setItem('card_inventory_logs', JSON.stringify(logs.value))
+                const totalCost = computed(() => logs.value.reduce((sum, item) => sum + item.cost, 0))
+                const remove = (i) => { if(confirm('确定删除吗？')){ logs.value.splice(i, 1); save(); } }
+                const clearAll = () => { if(confirm('警告：将清空所有记账记录！')){ logs.value = []; save(); } }
+
+                return { form, logs, addItem, totalCost, remove, clearAll }
+            }
+        }).mount('#app')
+    </script>
+</body>
+</html>
